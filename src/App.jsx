@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { Stage, Layer, RegularPolygon, Circle } from 'react-konva'
+import { Stage, Layer, RegularPolygon, Circle, Text } from 'react-konva'
 import './App.css'
 
 const BASE_PADDING = 10
+const NUMBER_INSET = 3
 
 // Hexes are positioned so their mathematical edges coincide with neighbours.
 // Because Konva strokes are centred on the path, two adjacent hexes draw their
@@ -18,10 +19,10 @@ function computeGrid(cols, rows, R, orientation, strokeWidth) {
     // Odd columns shift down by √3/2·R
     const cxStep = 1.5 * R
     const ryStep = Math.sqrt(3) * R
-    for (let c = 0; c < cols; c++) {
-      const yOff = c % 2 === 1 ? ryStep / 2 : 0
-      for (let r = 0; r < rows; r++) {
-        raw.push({ x: c * cxStep, y: r * ryStep + yOff })
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const yOff = c % 2 === 1 ? ryStep / 2 : 0
+        raw.push({ x: c * cxStep, y: r * ryStep + yOff, row: r, col: c })
       }
     }
   } else {
@@ -33,7 +34,7 @@ function computeGrid(cols, rows, R, orientation, strokeWidth) {
     for (let r = 0; r < rows; r++) {
       const xOff = r % 2 === 1 ? cxStep / 2 : 0
       for (let c = 0; c < cols; c++) {
-        raw.push({ x: c * cxStep + xOff, y: r * ryStep })
+        raw.push({ x: c * cxStep + xOff, y: r * ryStep, row: r, col: c })
       }
     }
   }
@@ -53,7 +54,7 @@ function computeGrid(cols, rows, R, orientation, strokeWidth) {
   const shiftY = pad - minY
 
   return {
-    positions: raw.map(p => ({ x: p.x + shiftX, y: p.y + shiftY })),
+    positions: raw.map(p => ({ x: p.x + shiftX, y: p.y + shiftY, row: p.row, col: p.col })),
     canvasWidth:  maxX - minX + 2 * pad,
     canvasHeight: maxY - minY + 2 * pad,
   }
@@ -76,6 +77,10 @@ function hexPoints(cx, cy, radius, rotationDeg) {
   return points.join(' ')
 }
 
+function getHexCode(row, col) {
+  return `${String(row).padStart(2, '0')}${String(col + 1).padStart(2, '0')}`
+}
+
 function App() {
   const stageRef = useRef(null)
   const [hexWidth,    setHexWidth]    = useState('')
@@ -85,6 +90,7 @@ function App() {
   const [strokeColor, setStrokeColor] = useState('#000000')
   const [strokeWidth, setStrokeWidth] = useState('1')
   const [showCenterDot, setShowCenterDot] = useState(false)
+  const [showNumbers, setShowNumbers] = useState(false)
   const [exportType, setExportType] = useState('png')
   const [drawnProps,  setDrawnProps]  = useState(null)
 
@@ -99,6 +105,7 @@ function App() {
     setDrawnProps({
       radius:      R,
       rotation:    ROTATION[orientation],
+      orientation,
       stroke:      strokeColor,
       strokeWidth: sw,
       ...grid,
@@ -121,8 +128,10 @@ function App() {
   const handleExportSvg = () => {
     if (!drawnProps) return
 
-    const { canvasWidth, canvasHeight, positions, radius, rotation, stroke, strokeWidth } = drawnProps
+    const { canvasWidth, canvasHeight, positions, radius, rotation, stroke, strokeWidth, orientation } = drawnProps
+    const halfH = orientation === 'side' ? (Math.sqrt(3) / 2) * radius : radius
     const dotRadius = Math.max(1.5, strokeWidth * 0.9)
+    const numberFontSize = Math.max(10, Math.min(18, radius * 0.28))
     const polygons = positions
       .map((pos) => {
         const points = hexPoints(pos.x, pos.y, radius, rotation)
@@ -134,8 +143,17 @@ function App() {
         .map((pos) => `<circle cx="${pos.x.toFixed(3)}" cy="${pos.y.toFixed(3)}" r="${dotRadius.toFixed(3)}" fill="${stroke}" />`)
         .join('')
       : ''
+    const labels = showNumbers
+      ? positions
+        .map((pos) => {
+          const code = getHexCode(pos.row, pos.col)
+          const labelY = pos.y - halfH + NUMBER_INSET
+          return `<text x="${pos.x.toFixed(3)}" y="${labelY.toFixed(3)}" text-anchor="middle" dominant-baseline="hanging" font-size="${numberFontSize.toFixed(2)}" font-family="Arial, sans-serif" fill="${stroke}">${code}</text>`
+        })
+        .join('')
+      : ''
 
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}" viewBox="0 0 ${canvasWidth} ${canvasHeight}">${polygons}${dots}</svg>`
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}" viewBox="0 0 ${canvasWidth} ${canvasHeight}">${polygons}${dots}${labels}</svg>`
     const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
     const url = URL.createObjectURL(blob)
 
@@ -231,6 +249,16 @@ function App() {
             />
             Center dot
           </label>
+
+          <label htmlFor="show-numbers" className="checkbox-label">
+            <input
+              id="show-numbers"
+              type="checkbox"
+              checked={showNumbers}
+              onChange={(e) => setShowNumbers(e.target.checked)}
+            />
+            Number hexes
+          </label>
         </div>
 
         <div className="controls-row controls-actions">
@@ -264,6 +292,17 @@ function App() {
           className="canvas-stage"
         >
           <Layer>
+            {(() => {
+              const halfW = drawnProps.orientation === 'side'
+                ? drawnProps.radius
+                : (Math.sqrt(3) / 2) * drawnProps.radius
+              const halfH = drawnProps.orientation === 'side'
+                ? (Math.sqrt(3) / 2) * drawnProps.radius
+                : drawnProps.radius
+              const numberFontSize = Math.max(10, Math.min(18, drawnProps.radius * 0.28))
+
+              return (
+                <>
             {drawnProps.positions.map((pos, i) => (
               <RegularPolygon
                 key={i}
@@ -286,6 +325,22 @@ function App() {
                 fill={drawnProps.stroke}
               />
             ))}
+            {showNumbers && drawnProps.positions.map((pos, i) => (
+              <Text
+                key={`num-${i}`}
+                x={pos.x - halfW}
+                y={pos.y - halfH + NUMBER_INSET}
+                width={halfW * 2}
+                align="center"
+                text={getHexCode(pos.row, pos.col)}
+                fill={drawnProps.stroke}
+                fontSize={numberFontSize}
+                listening={false}
+              />
+            ))}
+                </>
+              )
+            })()}
           </Layer>
         </Stage>
       )}
