@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Stage, Layer, RegularPolygon } from 'react-konva'
+import { useRef, useState } from 'react'
+import { Stage, Layer, RegularPolygon, Circle } from 'react-konva'
 import './App.css'
 
 const BASE_PADDING = 10
@@ -63,13 +63,29 @@ function computeGrid(cols, rows, R, orientation, strokeWidth) {
 // Rotating 30° gives flat-top (side-up).
 const ROTATION = { side: 30, point: 0 }
 
+function hexPoints(cx, cy, radius, rotationDeg) {
+  const points = []
+  // Konva RegularPolygon starts at point-up for rotation 0.
+  const base = ((rotationDeg - 90) * Math.PI) / 180
+  for (let i = 0; i < 6; i++) {
+    const angle = base + (i * Math.PI) / 3
+    const x = cx + radius * Math.cos(angle)
+    const y = cy + radius * Math.sin(angle)
+    points.push(`${x.toFixed(3)},${y.toFixed(3)}`)
+  }
+  return points.join(' ')
+}
+
 function App() {
+  const stageRef = useRef(null)
   const [hexWidth,    setHexWidth]    = useState('')
   const [cols,        setCols]        = useState('1')
   const [rows,        setRows]        = useState('1')
   const [orientation, setOrientation] = useState('side')
   const [strokeColor, setStrokeColor] = useState('#000000')
   const [strokeWidth, setStrokeWidth] = useState('1')
+  const [showCenterDot, setShowCenterDot] = useState(false)
+  const [exportType, setExportType] = useState('png')
   const [drawnProps,  setDrawnProps]  = useState(null)
 
   const handleDraw = () => {
@@ -87,6 +103,57 @@ function App() {
       strokeWidth: sw,
       ...grid,
     })
+  }
+
+  const handleExportPng = () => {
+    if (!stageRef.current) return
+
+    // Konva exports only drawn pixels, so untouched areas stay transparent.
+    const dataUrl = stageRef.current.toDataURL({ pixelRatio: 2 })
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = 'hex-grid.png'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportSvg = () => {
+    if (!drawnProps) return
+
+    const { canvasWidth, canvasHeight, positions, radius, rotation, stroke, strokeWidth } = drawnProps
+    const dotRadius = Math.max(1.5, strokeWidth * 0.9)
+    const polygons = positions
+      .map((pos) => {
+        const points = hexPoints(pos.x, pos.y, radius, rotation)
+        return `<polygon points="${points}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" />`
+      })
+      .join('')
+    const dots = showCenterDot
+      ? positions
+        .map((pos) => `<circle cx="${pos.x.toFixed(3)}" cy="${pos.y.toFixed(3)}" r="${dotRadius.toFixed(3)}" fill="${stroke}" />`)
+        .join('')
+      : ''
+
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}" viewBox="0 0 ${canvasWidth} ${canvasHeight}">${polygons}${dots}</svg>`
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'hex-grid.svg'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExport = () => {
+    if (exportType === 'svg') {
+      handleExportSvg()
+      return
+    }
+    handleExportPng()
   }
 
   return (
@@ -155,15 +222,43 @@ function App() {
             value={strokeColor}
             onChange={(e) => setStrokeColor(e.target.value)}
           />
+          <label htmlFor="center-dot" className="checkbox-label">
+            <input
+              id="center-dot"
+              type="checkbox"
+              checked={showCenterDot}
+              onChange={(e) => setShowCenterDot(e.target.checked)}
+            />
+            Center dot
+          </label>
+        </div>
 
+        <div className="controls-row controls-actions">
           <button type="button" onClick={handleDraw}>
             Draw Grid
           </button>
+
+          <div className="export-controls">
+            <label htmlFor="export-type">Type</label>
+            <select
+              id="export-type"
+              value={exportType}
+              onChange={(e) => setExportType(e.target.value)}
+            >
+              <option value="png">PNG</option>
+              <option value="svg">SVG</option>
+            </select>
+
+            <button type="button" onClick={handleExport} disabled={!drawnProps}>
+              Export
+            </button>
+          </div>
         </div>
       </div>
 
       {drawnProps && (
         <Stage
+          ref={stageRef}
           width={drawnProps.canvasWidth}
           height={drawnProps.canvasHeight}
           className="canvas-stage"
@@ -180,6 +275,15 @@ function App() {
                 fill="transparent"
                 stroke={drawnProps.stroke}
                 strokeWidth={drawnProps.strokeWidth}
+              />
+            ))}
+            {showCenterDot && drawnProps.positions.map((pos, i) => (
+              <Circle
+                key={`dot-${i}`}
+                x={pos.x}
+                y={pos.y}
+                radius={Math.max(1.5, drawnProps.strokeWidth * 0.9)}
+                fill={drawnProps.stroke}
               />
             ))}
           </Layer>
