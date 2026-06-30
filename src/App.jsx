@@ -90,7 +90,24 @@ function hexPoints(cx, cy, radius, rotationDeg) {
 }
 
 function getHexCode(row, col) {
-  return `${String(row).padStart(2, '0')}${String(col + 1).padStart(2, '0')}`
+  return `${encodeGridIndex(row, 0)}${encodeGridIndex(col + 1, 1)}`
+}
+
+function encodeGridIndex(value, minValue) {
+  if (value < 100) {
+    return String(value).padStart(2, '0')
+  }
+
+  // 100 -> AA, 101 -> AB, ... 125 -> AZ, 126 -> BA, etc.
+  const offset = value - 100
+  let first = Math.floor(offset / 26)
+  let second = offset % 26
+
+  while (first >= 26) {
+    first -= 26
+  }
+
+  return `${String.fromCharCode(65 + first)}${String.fromCharCode(65 + second)}`
 }
 
 function getNumberFontSize(radius, fontSizeSetting) {
@@ -103,9 +120,9 @@ function getNumberFontSize(radius, fontSizeSetting) {
 
 function App() {
   const stageRef = useRef(null)
-  const [hexWidth,    setHexWidth]    = useState('')
-  const [cols,        setCols]        = useState('1')
-  const [rows,        setRows]        = useState('1')
+  const [hexWidth,    setHexWidth]    = useState('100')
+  const [cols,        setCols]        = useState('10')
+  const [rows,        setRows]        = useState('10')
   const [orientation, setOrientation] = useState('side')
   const [strokeColor, setStrokeColor] = useState('#000000')
   const [strokeWidth, setStrokeWidth] = useState('1')
@@ -292,7 +309,7 @@ function App() {
             Number hexes
           </label>
 
-          <label htmlFor="number-offset">Number top offset (px)</label>
+          <label htmlFor="number-offset">Offset top (px)</label>
           <input
             id="number-offset"
             type="number"
@@ -306,7 +323,7 @@ function App() {
             placeholder={String(DEFAULT_NUMBER_OFFSET[orientation])}
           />
 
-          <label htmlFor="number-font-size">Number font size</label>
+          <label htmlFor="number-font-size">Font size</label>
           <select
             id="number-font-size"
             value={numberFontSize}
