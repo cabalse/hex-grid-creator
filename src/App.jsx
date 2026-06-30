@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stage, Layer, RegularPolygon, Circle, Text } from 'react-konva'
+import { Stage, Layer, Group, RegularPolygon, Circle, Text } from 'react-konva'
 import './App.css'
 
 const BASE_PADDING = 10
@@ -118,6 +118,47 @@ function getNumberFontSize(radius, fontSizeSetting) {
   return Math.max(1, parseFloat(fontSizeSetting) || 0)
 }
 
+function getNumberSideRotation(orientation, sideIndex) {
+  const baseAngle = orientation === 'side' ? 0 : 30
+  return baseAngle + (sideIndex % 6) * 60
+}
+
+function getNumberSideMidAngle(orientation, sideIndex) {
+  return getNumberSideRotation(orientation, sideIndex) - 90
+}
+
+function getNumberAnchorOffset(orientation, sideIndex, radius, inset) {
+  const apothem = (Math.sqrt(3) / 2) * radius
+  const distance = Math.max(0, apothem - inset)
+  const angle = (getNumberSideMidAngle(orientation, sideIndex) * Math.PI) / 180
+
+  return {
+    x: Math.cos(angle) * distance,
+    y: Math.sin(angle) * distance,
+  }
+}
+
+function getNumberSideOptions(orientation) {
+  if (orientation === 'side') {
+    return [
+      { label: 'Top side', value: '0' },
+      { label: 'Upper-right side', value: '1' },
+      { label: 'Lower-right side', value: '2' },
+      { label: 'Bottom side', value: '3' },
+      { label: 'Lower-left side', value: '4' },
+      { label: 'Upper-left side', value: '5' },
+    ]
+  }
+
+  return [
+    { label: 'Upper-right side', value: '0' },
+    { label: 'Right side', value: '1' },
+    { label: 'Lower-right side', value: '2' },
+    { label: 'Lower-left side', value: '3' },
+    { label: 'Left side', value: '4' },
+    { label: 'Upper-left side', value: '5' },
+  ]
+}
 function App() {
   const stageRef = useRef(null)
   const [hexWidth,    setHexWidth]    = useState('100')
@@ -131,6 +172,7 @@ function App() {
   const [numberOffset, setNumberOffset] = useState(String(DEFAULT_NUMBER_OFFSET.side))
   const [numberOffsetTouched, setNumberOffsetTouched] = useState(false)
   const [numberFontSize, setNumberFontSize] = useState('auto')
+  const [numberSide, setNumberSide] = useState('0')
   const [exportType, setExportType] = useState('png')
   const [drawnProps,  setDrawnProps]  = useState(null)
 
@@ -175,10 +217,11 @@ function App() {
     if (!drawnProps) return
 
     const { canvasWidth, canvasHeight, positions, radius, rotation, stroke, strokeWidth, orientation } = drawnProps
-    const halfH = orientation === 'side' ? (Math.sqrt(3) / 2) * radius : radius
     const dotRadius = Math.max(1.5, strokeWidth * 0.9)
     const fontSize = getNumberFontSize(radius, numberFontSize)
+    const textRotation = getNumberSideRotation(orientation, parseInt(numberSide, 10) || 0)
     const numberOffsetPx = Math.max(0, parseFloat(numberOffset) || 0)
+    const numberSideIndex = parseInt(numberSide, 10) || 0
     const polygons = positions
       .map((pos) => {
         const points = hexPoints(pos.x, pos.y, radius, rotation)
@@ -194,8 +237,10 @@ function App() {
       ? positions
         .map((pos) => {
           const code = getHexCode(pos.row, pos.col)
-          const labelY = pos.y - halfH + numberOffsetPx
-          return `<text x="${pos.x.toFixed(3)}" y="${labelY.toFixed(3)}" text-anchor="middle" dominant-baseline="hanging" font-size="${fontSize.toFixed(2)}" font-family="Arial, sans-serif" fill="${stroke}">${code}</text>`
+          const anchor = getNumberAnchorOffset(orientation, numberSideIndex, radius, numberOffsetPx)
+          const x = (pos.x + anchor.x).toFixed(3)
+          const y = (pos.y + anchor.y).toFixed(3)
+          return `<g transform="translate(${x} ${y}) rotate(${textRotation})"><text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize.toFixed(2)}" font-family="Arial, sans-serif" fill="${stroke}">${code}</text></g>`
         })
         .join('')
       : ''
@@ -309,7 +354,7 @@ function App() {
             Number hexes
           </label>
 
-          <label htmlFor="number-offset">Offset top (px)</label>
+          <label htmlFor="number-offset">Inset (px)</label>
           <input
             id="number-offset"
             type="number"
@@ -330,6 +375,19 @@ function App() {
             onChange={(e) => setNumberFontSize(e.target.value)}
           >
             {NUMBER_FONT_SIZE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <label htmlFor="number-side">Text side</label>
+          <select
+            id="number-side"
+            value={numberSide}
+            onChange={(e) => setNumberSide(e.target.value)}
+          >
+            {getNumberSideOptions(orientation).map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -372,11 +430,10 @@ function App() {
               const halfW = drawnProps.orientation === 'side'
                 ? drawnProps.radius
                 : (Math.sqrt(3) / 2) * drawnProps.radius
-              const halfH = drawnProps.orientation === 'side'
-                ? (Math.sqrt(3) / 2) * drawnProps.radius
-                : drawnProps.radius
               const fontSize = getNumberFontSize(drawnProps.radius, numberFontSize)
+              const textRotation = getNumberSideRotation(drawnProps.orientation, parseInt(numberSide, 10) || 0)
               const numberOffsetPx = Math.max(0, parseFloat(numberOffset) || 0)
+              const numberSideIndex = parseInt(numberSide, 10) || 0
 
               return (
                 <>
@@ -402,19 +459,29 @@ function App() {
                 fill={drawnProps.stroke}
               />
             ))}
-            {showNumbers && drawnProps.positions.map((pos, i) => (
-              <Text
+            {showNumbers && drawnProps.positions.map((pos, i) => {
+              const anchor = getNumberAnchorOffset(drawnProps.orientation, numberSideIndex, drawnProps.radius, numberOffsetPx)
+              return (
+              <Group
                 key={`num-${i}`}
-                x={pos.x - halfW}
-                y={pos.y - halfH + numberOffsetPx}
-                width={halfW * 2}
-                align="center"
-                text={getHexCode(pos.row, pos.col)}
-                fill={drawnProps.stroke}
-                fontSize={fontSize}
+                x={pos.x + anchor.x}
+                y={pos.y + anchor.y}
+                rotation={textRotation}
                 listening={false}
-              />
-            ))}
+              >
+                <Text
+                  x={-halfW}
+                  y={-fontSize / 2}
+                  width={halfW * 2}
+                  align="center"
+                  text={getHexCode(pos.row, pos.col)}
+                  fill={drawnProps.stroke}
+                  fontSize={fontSize}
+                  listening={false}
+                />
+              </Group>
+              )
+            })}
                 </>
               )
             })()}
