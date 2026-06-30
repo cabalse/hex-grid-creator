@@ -1,9 +1,21 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Stage, Layer, RegularPolygon, Circle, Text } from 'react-konva'
 import './App.css'
 
 const BASE_PADDING = 10
 const NUMBER_INSET = 3
+const DEFAULT_NUMBER_OFFSET = { side: 3, point: 15 }
+const NUMBER_FONT_SIZE_OPTIONS = [
+  { label: 'Auto', value: 'auto' },
+  { label: '9 px', value: '9' },
+  { label: '10 px', value: '10' },
+  { label: '12 px', value: '12' },
+  { label: '14 px', value: '14' },
+  { label: '16 px', value: '16' },
+  { label: '18 px', value: '18' },
+  { label: '20 px', value: '20' },
+  { label: '24 px', value: '24' },
+]
 
 // Hexes are positioned so their mathematical edges coincide with neighbours.
 // Because Konva strokes are centred on the path, two adjacent hexes draw their
@@ -81,6 +93,14 @@ function getHexCode(row, col) {
   return `${String(row).padStart(2, '0')}${String(col + 1).padStart(2, '0')}`
 }
 
+function getNumberFontSize(radius, fontSizeSetting) {
+  if (fontSizeSetting === 'auto') {
+    return Math.max(10, Math.min(18, radius * 0.28))
+  }
+
+  return Math.max(1, parseFloat(fontSizeSetting) || 0)
+}
+
 function App() {
   const stageRef = useRef(null)
   const [hexWidth,    setHexWidth]    = useState('')
@@ -91,8 +111,17 @@ function App() {
   const [strokeWidth, setStrokeWidth] = useState('1')
   const [showCenterDot, setShowCenterDot] = useState(false)
   const [showNumbers, setShowNumbers] = useState(false)
+  const [numberOffset, setNumberOffset] = useState(String(DEFAULT_NUMBER_OFFSET.side))
+  const [numberOffsetTouched, setNumberOffsetTouched] = useState(false)
+  const [numberFontSize, setNumberFontSize] = useState('auto')
   const [exportType, setExportType] = useState('png')
   const [drawnProps,  setDrawnProps]  = useState(null)
+
+  useEffect(() => {
+    if (!numberOffsetTouched) {
+      setNumberOffset(String(DEFAULT_NUMBER_OFFSET[orientation]))
+    }
+  }, [orientation, numberOffsetTouched])
 
   const handleDraw = () => {
     const R  = parseFloat(hexWidth) / 2
@@ -131,7 +160,8 @@ function App() {
     const { canvasWidth, canvasHeight, positions, radius, rotation, stroke, strokeWidth, orientation } = drawnProps
     const halfH = orientation === 'side' ? (Math.sqrt(3) / 2) * radius : radius
     const dotRadius = Math.max(1.5, strokeWidth * 0.9)
-    const numberFontSize = Math.max(10, Math.min(18, radius * 0.28))
+    const fontSize = getNumberFontSize(radius, numberFontSize)
+    const numberOffsetPx = Math.max(0, parseFloat(numberOffset) || 0)
     const polygons = positions
       .map((pos) => {
         const points = hexPoints(pos.x, pos.y, radius, rotation)
@@ -147,8 +177,8 @@ function App() {
       ? positions
         .map((pos) => {
           const code = getHexCode(pos.row, pos.col)
-          const labelY = pos.y - halfH + NUMBER_INSET
-          return `<text x="${pos.x.toFixed(3)}" y="${labelY.toFixed(3)}" text-anchor="middle" dominant-baseline="hanging" font-size="${numberFontSize.toFixed(2)}" font-family="Arial, sans-serif" fill="${stroke}">${code}</text>`
+          const labelY = pos.y - halfH + numberOffsetPx
+          return `<text x="${pos.x.toFixed(3)}" y="${labelY.toFixed(3)}" text-anchor="middle" dominant-baseline="hanging" font-size="${fontSize.toFixed(2)}" font-family="Arial, sans-serif" fill="${stroke}">${code}</text>`
         })
         .join('')
       : ''
@@ -249,7 +279,9 @@ function App() {
             />
             Center dot
           </label>
+        </div>
 
+        <div className="controls-row">
           <label htmlFor="show-numbers" className="checkbox-label">
             <input
               id="show-numbers"
@@ -259,6 +291,33 @@ function App() {
             />
             Number hexes
           </label>
+
+          <label htmlFor="number-offset">Number top offset (px)</label>
+          <input
+            id="number-offset"
+            type="number"
+            min="0"
+            max="100"
+            value={numberOffset}
+            onChange={(e) => {
+              setNumberOffsetTouched(true)
+              setNumberOffset(e.target.value)
+            }}
+            placeholder={String(DEFAULT_NUMBER_OFFSET[orientation])}
+          />
+
+          <label htmlFor="number-font-size">Number font size</label>
+          <select
+            id="number-font-size"
+            value={numberFontSize}
+            onChange={(e) => setNumberFontSize(e.target.value)}
+          >
+            {NUMBER_FONT_SIZE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="controls-row controls-actions">
@@ -299,7 +358,8 @@ function App() {
               const halfH = drawnProps.orientation === 'side'
                 ? (Math.sqrt(3) / 2) * drawnProps.radius
                 : drawnProps.radius
-              const numberFontSize = Math.max(10, Math.min(18, drawnProps.radius * 0.28))
+              const fontSize = getNumberFontSize(drawnProps.radius, numberFontSize)
+              const numberOffsetPx = Math.max(0, parseFloat(numberOffset) || 0)
 
               return (
                 <>
@@ -329,12 +389,12 @@ function App() {
               <Text
                 key={`num-${i}`}
                 x={pos.x - halfW}
-                y={pos.y - halfH + NUMBER_INSET}
+                y={pos.y - halfH + numberOffsetPx}
                 width={halfW * 2}
                 align="center"
                 text={getHexCode(pos.row, pos.col)}
                 fill={drawnProps.stroke}
-                fontSize={numberFontSize}
+                fontSize={fontSize}
                 listening={false}
               />
             ))}
