@@ -34,6 +34,12 @@
   margin-left: auto;
 }
 
+.hex-count {
+  font-weight: 600;
+  color: var(--text-h);
+  min-width: 84px;
+}
+
 .controls label {
   font-weight: 500;
   color: var(--text-h);

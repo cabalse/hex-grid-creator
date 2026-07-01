@@ -5,6 +5,13 @@ import './App.css'
 const BASE_PADDING = 10
 const NUMBER_INSET = 3
 const DEFAULT_NUMBER_OFFSET = { side: 3, point: 15 }
+const GRID_DPI = 300
+const UNIT_TO_PX = {
+  px: 1,
+  mm: GRID_DPI / 25.4,
+  cm: GRID_DPI / 2.54,
+  in: GRID_DPI,
+}
 const NUMBER_FONT_SIZE_OPTIONS = [
   { label: 'Auto', value: 'auto' },
   { label: '9 px', value: '9' },
@@ -72,6 +79,79 @@ function computeGrid(cols, rows, R, orientation, strokeWidth) {
   }
 }
 
+function getGridCanvasSizeFromCounts(cols, rows, R, orientation, strokeWidth) {
+  const pad = BASE_PADDING + strokeWidth / 2
+  const sqrt3 = Math.sqrt(3)
+
+  if (orientation === 'side') {
+    const cxStep = 1.5 * R
+    const ryStep = sqrt3 * R
+    const halfW = R
+    const halfH = (sqrt3 / 2) * R
+    const width = (cols - 1) * cxStep + 2 * halfW + 2 * pad
+    const height = (rows - 1) * ryStep + (cols > 1 ? ryStep / 2 : 0) + 2 * halfH + 2 * pad
+    return { width, height }
+  }
+
+  const cxStep = sqrt3 * R
+  const ryStep = 1.5 * R
+  const halfW = (sqrt3 / 2) * R
+  const halfH = R
+  const width = (cols - 1) * cxStep + (rows > 1 ? cxStep / 2 : 0) + 2 * halfW + 2 * pad
+  const height = (rows - 1) * ryStep + 2 * halfH + 2 * pad
+  return { width, height }
+}
+
+function computeCountsForArea(targetWidthPx, targetHeightPx, R, orientation, strokeWidth) {
+  const sqrt3 = Math.sqrt(3)
+  const pad = BASE_PADDING + strokeWidth / 2
+  const safeWidth = Math.max(0, targetWidthPx)
+  const safeHeight = Math.max(0, targetHeightPx)
+
+  if (orientation === 'side') {
+    const cxStep = 1.5 * R
+    const ryStep = sqrt3 * R
+    const halfW = R
+    const halfH = (sqrt3 / 2) * R
+
+    const maxCols = Math.max(0, Math.floor((safeWidth - 2 * halfW - 2 * pad) / cxStep + 1))
+    let best = { cols: 0, rows: 0, hexes: 0 }
+
+    for (let c = 1; c <= maxCols; c++) {
+      const extraHeight = c > 1 ? ryStep / 2 : 0
+      const maxRows = Math.max(0, Math.floor((safeHeight - 2 * halfH - 2 * pad - extraHeight) / ryStep + 1))
+      if (maxRows < 1) continue
+
+      const hexes = c * maxRows
+      if (hexes > best.hexes) {
+        best = { cols: c, rows: maxRows, hexes }
+      }
+    }
+
+    return { cols: best.cols, rows: best.rows }
+  }
+
+  const cxStep = sqrt3 * R
+  const ryStep = 1.5 * R
+  const halfW = (sqrt3 / 2) * R
+  const halfH = R
+  const maxRows = Math.max(0, Math.floor((safeHeight - 2 * halfH - 2 * pad) / ryStep + 1))
+  let best = { cols: 0, rows: 0, hexes: 0 }
+
+  for (let r = 1; r <= maxRows; r++) {
+    const extraWidth = r > 1 ? cxStep / 2 : 0
+    const maxCols = Math.max(0, Math.floor((safeWidth - 2 * halfW - 2 * pad - extraWidth) / cxStep + 1))
+    if (maxCols < 1) continue
+
+    const hexes = r * maxCols
+    if (hexes > best.hexes) {
+      best = { cols: maxCols, rows: r, hexes }
+    }
+  }
+
+  return { cols: best.cols, rows: best.rows }
+}
+
 // Rotation: Konva's RegularPolygon defaults to point-up.
 // Rotating 30° gives flat-top (side-up).
 const ROTATION = { side: 30, point: 0 }
@@ -90,10 +170,10 @@ function hexPoints(cx, cy, radius, rotationDeg) {
 }
 
 function getHexCode(row, col) {
-  return `${encodeGridIndex(row, 0)}${encodeGridIndex(col + 1, 1)}`
+  return `${encodeGridIndex(row)}${encodeGridIndex(col + 1)}`
 }
 
-function encodeGridIndex(value, minValue) {
+function encodeGridIndex(value) {
   if (value < 100) {
     return String(value).padStart(2, '0')
   }
@@ -162,8 +242,12 @@ function getNumberSideOptions(orientation) {
 function App() {
   const stageRef = useRef(null)
   const [hexWidth,    setHexWidth]    = useState('100')
+  const [hexUnit,     setHexUnit]     = useState('px')
+  const [gridMode,    setGridMode]    = useState('count')
   const [cols,        setCols]        = useState('10')
   const [rows,        setRows]        = useState('10')
+  const [areaWidth,   setAreaWidth]   = useState('1000')
+  const [areaHeight,  setAreaHeight]  = useState('1000')
   const [orientation, setOrientation] = useState('side')
   const [strokeColor, setStrokeColor] = useState('#000000')
   const [strokeWidth, setStrokeWidth] = useState('1')
@@ -182,12 +266,36 @@ function App() {
     }
   }, [orientation, numberOffsetTouched])
 
+  useEffect(() => {
+    if (hexUnit !== 'px' && exportType === 'svg') {
+      setExportType('png')
+    }
+  }, [hexUnit, exportType])
+
+  const canExportSvg = hexUnit === 'px'
+  const hexCount = drawnProps?.positions.length ?? 0
+
   const handleDraw = () => {
-    const R  = parseFloat(hexWidth) / 2
+    const unitFactor = UNIT_TO_PX[hexUnit] || 1
+    const R  = (parseFloat(hexWidth) * unitFactor) / 2
     const sw = Math.max(1, parseFloat(strokeWidth) || 1)
-    const c  = Math.max(1, parseInt(cols)  || 1)
-    const r  = Math.max(1, parseInt(rows)  || 1)
     if (!isFinite(R) || R <= 0) return
+
+    let c = Math.max(1, parseInt(cols) || 1)
+    let r = Math.max(1, parseInt(rows) || 1)
+
+    if (gridMode === 'area') {
+      const targetWidthPx = Math.max(1, (parseFloat(areaWidth) || 1) * unitFactor)
+      const targetHeightPx = Math.max(1, (parseFloat(areaHeight) || 1) * unitFactor)
+      const counts = computeCountsForArea(targetWidthPx, targetHeightPx, R, orientation, sw)
+      c = counts.cols
+      r = counts.rows
+
+      if (c < 1 || r < 1) {
+        setDrawnProps(null)
+        return
+      }
+    }
 
     const grid = computeGrid(c, r, R, orientation, sw)
     setDrawnProps({
@@ -272,15 +380,86 @@ function App() {
 
       <div className="controls">
         <div className="controls-row">
-          <label htmlFor="hex-width">Hex size (px)</label>
+          <label htmlFor="grid-mode">Type</label>
+          <select
+            id="grid-mode"
+            value={gridMode}
+            onChange={(e) => setGridMode(e.target.value)}
+          >
+            <option value="count">Rows and columns</option>
+            <option value="area">Area width and height</option>
+          </select>
+
+          {gridMode === 'count' ? (
+            <>
+              <label htmlFor="rows">Rows</label>
+              <input
+                id="rows"
+                type="number"
+                min="1"
+                max="100"
+                value={rows}
+                onChange={(e) => setRows(e.target.value)}
+              />
+
+              <label htmlFor="cols">Columns</label>
+              <input
+                id="cols"
+                type="number"
+                min="1"
+                max="100"
+                value={cols}
+                onChange={(e) => setCols(e.target.value)}
+              />
+            </>
+          ) : (
+            <>
+              <label htmlFor="area-width">Width ({hexUnit})</label>
+              <input
+                id="area-width"
+                type="number"
+                min="0.01"
+                step="any"
+                value={areaWidth}
+                onChange={(e) => setAreaWidth(e.target.value)}
+              />
+
+              <label htmlFor="area-height">Height ({hexUnit})</label>
+              <input
+                id="area-height"
+                type="number"
+                min="0.01"
+                step="any"
+                value={areaHeight}
+                onChange={(e) => setAreaHeight(e.target.value)}
+              />
+            </>
+          )}
+        </div>
+
+        <div className="controls-row">
+          <label htmlFor="hex-width">Hex size</label>
           <input
             id="hex-width"
             type="number"
-            min="4"
+            min="0.01"
+            step="any"
             value={hexWidth}
             onChange={(e) => setHexWidth(e.target.value)}
             placeholder="e.g. 80"
           />
+
+          <label htmlFor="hex-unit">Unit</label>
+          <select
+            id="hex-unit"
+            value={hexUnit}
+            onChange={(e) => setHexUnit(e.target.value)}
+          >
+            <option value="px">px</option>
+            <option value="mm">mm</option>
+            <option value="cm">cm</option>
+            <option value="in">inches</option>
+          </select>
 
           <label htmlFor="orientation">Orientation</label>
           <select
@@ -291,26 +470,6 @@ function App() {
             <option value="side">Side up</option>
             <option value="point">Point up</option>
           </select>
-
-          <label htmlFor="rows">Rows</label>
-          <input
-            id="rows"
-            type="number"
-            min="1"
-            max="100"
-            value={rows}
-            onChange={(e) => setRows(e.target.value)}
-          />
-
-          <label htmlFor="cols">Columns</label>
-          <input
-            id="cols"
-            type="number"
-            min="1"
-            max="100"
-            value={cols}
-            onChange={(e) => setCols(e.target.value)}
-          />
         </div>
 
         <div className="controls-row">
@@ -400,6 +559,8 @@ function App() {
             Draw Grid
           </button>
 
+          <span className="hex-count">Hexes: {hexCount}</span>
+
           <div className="export-controls">
             <label htmlFor="export-type">Type</label>
             <select
@@ -408,7 +569,7 @@ function App() {
               onChange={(e) => setExportType(e.target.value)}
             >
               <option value="png">PNG</option>
-              <option value="svg">SVG</option>
+              <option value="svg" disabled={!canExportSvg}>SVG</option>
             </select>
 
             <button type="button" onClick={handleExport} disabled={!drawnProps}>
