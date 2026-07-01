@@ -1,4 +1,4 @@
-#app {
+.create-hex-grid {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6,7 +6,14 @@
   gap: 24px;
 }
 
-.controls {
+.create-hex-grid h1 {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  letter-spacing: -0.04em;
+  margin: 0;
+  color: var(--text-h, #111827);
+}
+
+.create-hex-grid .controls {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -14,7 +21,7 @@
   width: 100%;
 }
 
-.controls-row {
+.create-hex-grid .controls-row {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -22,86 +29,86 @@
   justify-content: center;
 }
 
-.controls-actions {
+.create-hex-grid .controls-actions {
   width: min(100%, 980px);
   justify-content: space-between;
 }
 
-.export-controls {
+.create-hex-grid .export-controls {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-left: auto;
 }
 
-.hex-count {
+.create-hex-grid .hex-count {
   font-weight: 600;
-  color: var(--text-h);
+  color: var(--text-h, #111827);
   min-width: 84px;
 }
 
-.controls label {
+.create-hex-grid .controls label {
   font-weight: 500;
-  color: var(--text-h);
+  color: var(--text-h, #111827);
 }
 
-.checkbox-label {
+.create-hex-grid .checkbox-label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   user-select: none;
 }
 
-.checkbox-label input[type="checkbox"] {
+.create-hex-grid .checkbox-label input[type="checkbox"] {
   width: 16px;
   height: 16px;
 }
 
-.controls input[type="color"] {
+.create-hex-grid .controls input[type="color"] {
   width: 40px;
   height: 36px;
   padding: 2px;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--bg, #ffffff);
   cursor: pointer;
 }
 
-.controls input[type="number"] {
+.create-hex-grid .controls input[type="number"] {
   font-size: 16px;
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--bg, #ffffff);
+  color: var(--text-h, #111827);
   width: 80px;
   outline-offset: 2px;
 
   &:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent, #2563eb);
   }
 }
 
-.controls select {
+.create-hex-grid .controls select {
   font-size: 16px;
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--bg, #ffffff);
+  color: var(--text-h, #111827);
   outline-offset: 2px;
   cursor: pointer;
 
   &:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent, #2563eb);
   }
 }
 
-.controls button {
+.create-hex-grid .controls button {
   font-size: 16px;
   padding: 8px 20px;
   border-radius: 6px;
-  background: var(--accent);
+  background: var(--accent, #2563eb);
   color: #fff;
   border: none;
   cursor: pointer;
@@ -111,29 +118,29 @@
     opacity: 0.85;
   }
   &:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent, #2563eb);
     outline-offset: 2px;
   }
 }
 
-.controls button:disabled {
+.create-hex-grid .controls button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.canvas-stage {
-  border: 1px solid var(--border);
+.create-hex-grid .canvas-stage {
+  border: 1px solid var(--border, #d1d5db);
   border-radius: 8px;
   background: #fff;
   overflow: hidden;
 }
 
 @media (max-width: 720px) {
-  .controls-actions {
+  .create-hex-grid .controls-actions {
     justify-content: center;
   }
 
-  .export-controls {
+  .create-hex-grid .export-controls {
     margin-left: 0;
   }
 }
